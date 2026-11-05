@@ -1,0 +1,12 @@
+# Nix build outputs
+/result
+/result-*
+
+# Local development state
+/.direnv/
+/.envrc.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.venv/
