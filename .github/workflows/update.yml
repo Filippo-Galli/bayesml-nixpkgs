@@ -1,0 +1,102 @@
+name: Update Packages
+
+on:
+  schedule:
+    # Run daily at 05:00 UTC
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  discover:
+    name: Discover Packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.get-pkgs.outputs.packages }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Extract packages from flake
+        id: get-pkgs
+        run: |
+          # Dynamically get all packages declared in the flake
+          PKGS=$(nix eval --json .#packages.x86_64-linux --apply builtins.attrNames)
+          echo "Discovered packages: $PKGS"
+          echo "packages=$PKGS" >> "$GITHUB_OUTPUT"
+
+  check-and-update:
+    name: Check update for ${{ matrix.package }}
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.discover.outputs.packages) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v23
+        with:
+          extra-conf: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      # 1. Cheap check: bump version + hash only (no build)
+      - name: Check for new release
+        id: update
+        run: |
+          OLD_VERSION=$(nix eval --raw ".#packages.x86_64-linux.${{ matrix.package }}.version" 2>/dev/null || echo "unknown")
+
+          # Run nix-update; if package has no releases/tags (e.g. unversioned git snapshot), continue gracefully
+          if nix run nixpkgs#nix-update -- --flake "${{ matrix.package }}"; then
+            NEW_VERSION=$(nix eval --raw ".#packages.x86_64-linux.${{ matrix.package }}.version" 2>/dev/null || echo "unknown")
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ] && [ "$NEW_VERSION" != "unknown" ]; then
+              echo "updated=true" >> "$GITHUB_OUTPUT"
+              echo "old_version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+              echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            else
+              echo "updated=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "nix-update was skipped or unsupported for ${{ matrix.package }}"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 2. Only build and test if an update was found
+      - name: Set up Magic Nix Cache
+        if: steps.update.outputs.updated == 'true'
+        uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: false
+
+      - name: Build & test updated package
+        if: steps.update.outputs.updated == 'true'
+        run: nix build ".#${{ matrix.package }}" --print-build-logs
+
+      # 3. Open Pull Request
+      - name: Create Pull Request
+        if: steps.update.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "${{ matrix.package }}: ${{ steps.update.outputs.old_version }} -> ${{ steps.update.outputs.new_version }}"
+          title: "${{ matrix.package }}: ${{ steps.update.outputs.old_version }} -> ${{ steps.update.outputs.new_version }}"
+          body: |
+            Automated update of `${{ matrix.package }}` from `${{ steps.update.outputs.old_version }}` to `${{ steps.update.outputs.new_version }}`.
+
+            - Updated `version` and `hash` in `pkgs/${{ matrix.package }}/default.nix`.
+            - Verified package build and test suite with `nix build`.
+          branch: "auto-update/${{ matrix.package }}-${{ steps.update.outputs.new_version }}"
+          delete-branch: true
+          labels: |
+            automated
+            update
+          assignees: Filippo-Galli

@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect packages to build
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+      has_packages: ${{ steps.matrix.outputs.has_packages }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Compute package matrix
+        id: matrix
+        run: |
+          # 1. Dynamically read all packages declared in the flake
+          ALL_PKGS=$(nix eval --json .#packages.x86_64-linux --apply builtins.attrNames)
+          echo "Discovered flake packages: $ALL_PKGS"
+
+          # 2. Determine modified files safely
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=50 2>/dev/null || true
+            if git rev-parse --verify "origin/${{ github.base_ref }}" >/dev/null 2>&1; then
+              CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD 2>/dev/null || echo "flake.nix")
+            else
+              CHANGED="flake.nix"
+            fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+              CHANGED=$(git diff --name-only "$BEFORE" HEAD 2>/dev/null || echo "flake.nix")
+            elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+              CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "flake.nix")
+            else
+              CHANGED="flake.nix"
+            fi
+          else
+            CHANGED="flake.nix" # Force build all on manual trigger or initial push
+          fi
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # 3. If core files changed (or adding a new package), build all packages
+          if echo "$CHANGED" | grep -qE '^(flake\.|overlay\.nix|\.github/)'; then
+            echo "Core configuration changed. Building all packages."
+            echo "packages=$ALL_PKGS" >> "$GITHUB_OUTPUT"
+            echo "has_packages=true" >> "$GITHUB_OUTPUT"
+          else
+            # Extract changed directories under pkgs/
+            CHANGED_DIRS=$(echo "$CHANGED" | grep '^pkgs/' | cut -d/ -f2 | tr '[:upper:]' '[:lower:]' | tr -d '.' | sort -u)
+
+            # Match changed dirs against packages in the flake
+            MATCHED=$(echo "$ALL_PKGS" | jq -c --argjson changed "$(echo "$CHANGED_DIRS" | jq -R . | jq -s .)" \
+              '[.[] | select(. as $p | $changed | index($p))]')
+
+            # Handle dependents (e.g., if torchtestcase/umnn/nflows/zuko changed, include sbi)
+            MATCHED=$(echo "$MATCHED" | jq -c '
+              if (. | index("torchtestcase") or index("umnn")) and (index("nflows") | not) then . + ["nflows"] else . end
+              | if (. | index("nflows") or index("zuko")) and (index("sbi") | not) then . + ["sbi"] else . end
+            ')
+
+            if [ "$MATCHED" = "[]" ] || [ -z "$MATCHED" ]; then
+              echo "No package changes detected."
+              echo "packages=[]" >> "$GITHUB_OUTPUT"
+              echo "has_packages=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Building changed packages: $MATCHED"
+              echo "packages=$MATCHED" >> "$GITHUB_OUTPUT"
+              echo "has_packages=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  build:
+    name: Build .#${{ matrix.package }}
+    needs: detect
+    if: needs.detect.outputs.has_packages == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.detect.outputs.packages) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Set up Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: false
+
+      - name: Build & test package
+        run: nix build .#${{ matrix.package }} -L
