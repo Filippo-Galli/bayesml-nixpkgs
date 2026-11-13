@@ -4,6 +4,16 @@
     and scientific machine learning
   '';
 
+  nixConfig = {
+    extra-substituters = [
+      "https://cache.thepippo.org/bayesml-nixpkgs"
+    ];
+
+    extra-trusted-public-keys = [
+      "bayesml-nixpkgs:/DNsZGivvMfa8MiUrYn5vrCTlCOlAbU0aKd9HJ2/Qa8="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };

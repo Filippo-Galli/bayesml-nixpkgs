@@ -1,0 +1,16 @@
+systems = [
+  "x86_64-linux",
+  "aarch64-linux",
+]
+
+include = [
+  "packages.*.*",
+]
+
+substituters = [
+  "https://cache.thepippo.org/bayesml-nixpkgs",
+]
+
+trusted-public-keys = [
+  "bayesml-nixpkgs:/DNsZGivvMfa8MiUrYn5vrCTlCOlAbU0aKd9HJ2/Qa8=",
+]
