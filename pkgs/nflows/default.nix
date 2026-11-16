@@ -57,6 +57,16 @@ buildPythonPackage (finalAttrs: {
     "tests/transforms/coupling_test.py::PiecewiseCouplingTransformTest::test_forward_inverse_are_consistent_unconstrained"
     "tests/transforms/nonlinearities_test.py::TestPiecewiseCDF::test_forward_inverse_are_consistent"
     "tests/transforms/nonlinearities_test.py::TestUnconstrainedPiecewiseCDF::test_forward_inverse_are_consistent"
+    "tests/transforms/splines/cubic_test.py::UnconstrainedCubicSplineTest::test_forward_inverse_are_consistent"
+    "tests/transforms/splines/linear_test.py::LinearSplineTest::test_forward_inverse_are_consistent"
+    "tests/transforms/splines/quadratic_test.py::QuadraticSplineTest::test_forward_inverse_are_consistent"
+
+    # Removed since had deprecated functions
+    "tests/transforms/linear_test.py::NaiveLinearTest::test_forward_no_cache"
+    "tests/transforms/linear_test.py::NaiveLinearTest::test_logabsdet"
+    "tests/transforms/linear_test.py::NaiveLinearTest::test_weight"
+    "tests/transforms/linear_test.py::NaiveLinearTest::test_weight_inverse"
+    "tests/utils/torchutils_test.py::TorchUtilsTest::test_random_orthogonal"
   ];
 
   meta = {
