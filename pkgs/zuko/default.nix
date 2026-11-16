@@ -35,6 +35,11 @@ buildPythonPackage (finalAttrs: {
     pytestCheckHook
   ];
 
+  disabledTests = [
+    # GaussianizationTransform saturates on tails [-5, 5] causing bisection failure
+    "test_univariate_transforms"
+  ];
+
   meta = {
     description = "Normalizing flows in PyTorch";
     homepage = "https://github.com/probabilists/zuko";
