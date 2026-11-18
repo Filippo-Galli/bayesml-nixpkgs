@@ -46,6 +46,7 @@
         "sbi"
         "torchtestcase"
         "zuko"
+        "sbi-simulators"
       ];
     in
     {
