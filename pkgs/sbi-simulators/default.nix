@@ -20,7 +20,7 @@ buildPythonPackage (finalAttrs: {
     owner = "Filippo-Galli";
     repo = "sbi-simulators";
     tag = "v${finalAttrs.version}";
-    sha256 = "sha256-9kkywK0FVPRLItKwsEcUmpldOqi7+306WWepjf/YmuQ=";
+    sha256 = "sha256-O8EvWBJZXLeXWSO9GYpMw5V6fhmkioRDM3aa163rKN4=";
   };
 
   build-system = [
