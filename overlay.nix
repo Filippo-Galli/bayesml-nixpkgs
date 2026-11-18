@@ -26,6 +26,8 @@ final: prev: {
       torchtestcase = pyFinal.callPackage ./pkgs/torchtestcase { };
 
       zuko = pyFinal.callPackage ./pkgs/zuko { };
+
+      sbi-simulators = pyFinal.callPackage ./pkgs/sbi-simulators { };
     })
   ];
 
