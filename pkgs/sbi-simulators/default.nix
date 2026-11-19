@@ -13,14 +13,14 @@
 }:
 buildPythonPackage (finalAttrs: {
   pname = "sbi-simulator";
-  version = "0.2.0";
+  version = "0.2.1";
   pyproject = true;
 
   src = fetchFromGitHub {
     owner = "Filippo-Galli";
     repo = "sbi-simulators";
     tag = "v${finalAttrs.version}";
-    sha256 = "sha256-O8EvWBJZXLeXWSO9GYpMw5V6fhmkioRDM3aa163rKN4=";
+    sha256 = "sha256-sUrFGAga8P7V3GoY9P/YUo3nZsOt0gSa6wPsLKzUPIM=";
   };
 
   build-system = [
